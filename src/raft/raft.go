@@ -89,8 +89,6 @@ func (rf *Raft) GetState() (int, bool) {
 	// Your code here (2A).
 	rf.mu.Lock()
 	term = rf.currentTerm
-	// isleader = rf.isLeader
-	// 自己会给自己投票
 	if rf.role == 2 {
 		isleader = true
 	}
@@ -179,14 +177,14 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	if rf.role != 0 {
 		// 跟随者才能投票
 		reply.VoteGranted = false
-		DPrintf("me:%v, role:%v, 收到%v投票请求, votes:%v, 拒绝投票:我不是跟随者",
-			rf.me, rf.role, args.CandidateId, rf.votes)
+		Infof(" 收到%d投票请求, votes:%d, 拒绝投票:我不是跟随者",
+			rf, args.CandidateId, rf.votes)
 		return
 	}
 	// 当前任期比请求的任期大,直接忽略
 	if rf.currentTerm > args.Term {
-		DPrintf("me:%v, role:%v, 收到%v投票请求, votes:%v, 拒绝投票",
-			rf.me, rf.role, args.CandidateId, rf.votes)
+		Infof(" 收到%d投票请求, votes:%d, 拒绝投票",
+			rf, args.CandidateId, rf.votes)
 		reply.Term = rf.currentTerm
 		reply.VoteGranted = false
 		return
@@ -194,8 +192,8 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	// 已经投过票了
 	if rf.currentTerm == args.Term {
 		if rf.votedFor != -1 {
-			DPrintf("me:%v, role:%v, 收到%v投票请求, votes:%v, 拒绝投票",
-				rf.me, rf.role, args.CandidateId, rf.votes)
+			Infof(" 收到%d投票请求, votes:%d, 拒绝投票||||已经投过票了",
+				rf, args.CandidateId, rf.votes)
 			reply.Term = rf.currentTerm
 			reply.VoteGranted = false
 			return
@@ -204,8 +202,8 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 		rf.votedFor = args.CandidateId
 		reply.Term = rf.currentTerm
 		reply.VoteGranted = true
-		DPrintf("me:%v, role:%v, 收到%v投票请求, votes:%v, 【给出】投票",
-			rf.me, rf.role, args.CandidateId, rf.votes)
+		Infof("【给出】投票 S%d ---> S%d",
+			rf, rf.me, args.CandidateId)
 		return
 	}
 	// rf.currentTerm < args.term
@@ -215,8 +213,8 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	rf.votedFor = args.CandidateId
 	reply.Term = rf.currentTerm
 	reply.VoteGranted = true
-	DPrintf("me:%v, role:%v, 收到%v投票请求, votes:%v, 【给出】投票",
-		rf.me, rf.role, args.CandidateId, rf.votes)
+	Infof("【给出】投票 S%d ---> S%d",
+		rf, rf.me, args.CandidateId)
 	return
 }
 
@@ -308,48 +306,74 @@ func (rf *Raft) sendHeartsBeatsMsg(server int, args *HeartsBeatsMsg, empty *Empt
 }
 func (rf *Raft) DealHeartsBeatsMsg(args *HeartsBeatsMsg, empty *Empty) {
 	if _, isLeader := rf.GetState(); isLeader {
-		if args.Term < rf.currentTerm {
+		rf.mu.Lock()
+		term := rf.currentTerm
+		rf.mu.Unlock()
+		if args.Term < term {
 			return
 		}
 	}
 	rf.mu.Lock()
-	defer rf.mu.Unlock()
 	// 1、不是leader
 	// 2、是leader但是currentTerm小于另一个leader
+	// DPrintf("%d", args.Term == rf.currentTerm)
 	rf.role = 0
 	rf.votes = 0
 	rf.currentTerm = args.Term
 	rf.votedFor = args.CandidateId
+	rf.mu.Unlock()
 	rf.leaderHeartsBeats <- struct{}{}
-	DPrintf("me:%v, 接收到leader:%v 的心跳,同步term,变为追随者【【【【【【【【【【", rf.me, args.CandidateId)
+	// DPrintf(" 接收到leader:%d 的心跳,同步term,变为追随者【【【【【【【【【【", rf, args.CandidateId)
 }
 
 // 2A 心跳机制
 func (rf *Raft) heartsbeats() {
 	for rf.killed() == false {
-		time.Sleep(10 * time.Millisecond)
+		time.Sleep(20 * time.Millisecond)
+		normalHeartBeats := make(chan struct{}, 0)
+		/////////
 		if _, isLeader := rf.GetState(); !isLeader {
 			continue
 		}
-		rf.mu.Lock()
-		length := len(rf.peers)
-		rf.mu.Unlock()
-		for i := 0; i < length; i++ {
+		go func(rf *Raft) {
 			rf.mu.Lock()
-			args := HeartsBeatsMsg{
-				Term:        rf.currentTerm,
-				CandidateId: rf.me,
-			}
+			length := len(rf.peers)
 			rf.mu.Unlock()
-			if i != rf.me {
-				// DPrintf("接收到leader的心跳, leader:%v,【【【【【【【【【【", rf.me)
-				rf.sendHeartsBeatsMsg(i, &args, &Empty{})
+			wg := sync.WaitGroup{}
+			for i := 0; i < length && !rf.killed(); i++ {
+				if i == rf.me {
+					continue
+				}
+				wg.Add(1)
+				go func(wg *sync.WaitGroup, i int, rf *Raft) {
+					defer wg.Done()
+					rf.mu.Lock()
+					args := HeartsBeatsMsg{
+						Term:        rf.currentTerm,
+						CandidateId: rf.me,
+					}
+					rf.mu.Unlock()
+					// DPrintf("发出心跳,】】】】】】】】】", rf)
+					rf.sendHeartsBeatsMsg(i, &args, &Empty{})
+				}(&wg, i, rf)
 			}
-
+			wg.Wait()
+			normalHeartBeats <- struct{}{}
+		}(rf)
+		//////////////
+		rand.Seed(time.Now().UnixMilli())
+		select {
+		case <-normalHeartBeats:
+			{
+				Infof("心跳正常", rf)
+			}
+			// 心跳超时处理
+		case <-time.Tick(time.Duration(100+rand.Intn(30)) * time.Millisecond):
+			{
+				Errorf("心跳超时", rf)
+			}
 		}
-	}
-	if rf.killed() {
-		DPrintf("%v: is killed -----------===================-------------", rf.me)
+
 	}
 }
 
@@ -361,88 +385,123 @@ func (rf *Raft) ticker() {
 		// Your code here to check if a leader election should
 		// be started and to randomize sleeping time using
 		// time.Sleep().
-		rand.Seed(time.Now().UnixMilli())
-
 		select {
 		case <-rf.leaderHeartsBeats:
+		case <-time.Tick(80 * time.Millisecond):
 			{
-
-			}
-		case <-time.Tick(time.Duration(150+rand.Intn(200)) * time.Millisecond):
-			{
-				rf.mu.Lock()
-				if rf.role == 0 {
-					// 跟随者 -> 候选人
-					rf.currentTerm++
-					rf.role = 1
-					// 选择自己
-					rf.votes = 1
-					rf.votedFor = rf.me
-					DPrintf("me:%v, role:%v, 跟随者 -> 候选人 votes:%v",
-						rf.me, rf.role, rf.votes)
-					// 发出投票
-					length := len(rf.peers)
-					rf.mu.Unlock()
-					for i := 0; i < length; i++ {
-						rf.mu.Lock()
-						role := rf.role
-						rf.mu.Unlock()
-						if role != 1 {
-							break
-						}
-						if i != rf.me {
-							rf.mu.Lock()
-							args := RequestVoteArgs{
-								Term:        rf.currentTerm,
-								CandidateId: rf.me,
-							}
-							reply := RequestVoteReply{}
-							rf.mu.Unlock()
-							rf.sendRequestVote(i, &args, &reply)
-							///===================
-							rf.mu.Lock()
-							if reply.VoteGranted {
-								// 成功获取选票
-								rf.votes++
-								if rf.votes > len(rf.peers)/2 {
-									rf.role = 2
-									DPrintf("me:%v, role:%v, ===========成为leader============, votes:%v",
-										rf.me, rf.role, rf.votes)
-								}
-								DPrintf("me:%v, role:%v, 【收到】投票, votes:%v",
-									rf.me, rf.role, rf.votes)
-							} else {
-								// 获得选票失败 : 候选人->跟随者
-								rf.votedFor = -1
-								rf.votes = 0
-								// rf.currentTerm = reply.term
-								if rf.currentTerm < reply.Term {
-									rf.currentTerm = reply.Term
-									// 恢复跟随者身份
-									rf.role = 0
-									DPrintf("me:%v, role:%v, 【没有收到】投票&&currentTerm 太小了-》恢复跟随者身份",
-										rf.me, rf.role)
-								}
-							}
-							rf.mu.Unlock()
-						}
-					}
+				askForVotesChan := make(chan struct{}, 0)
+				leaderChan := make(chan struct{}, 0)
+				go func(askForVotesChan chan struct{}, leaderChan chan struct{}) {
 					rf.mu.Lock()
-					if rf.role != 2 {
-						rf.role = 0
-						rf.votedFor = -1
-						rf.votes = 0
-						DPrintf("me:%v, 【竞争失败】-》恢复跟随者身份", rf.me)
-						// time.Sleep(time.Duration(rand.Intn(10)) * time.Millisecond)
-					}
+					role := rf.role
 					rf.mu.Unlock()
-					continue
+					if role == 2 {
+						leaderChan <- struct{}{}
+						return
+					}
+					if role == 0 {
+						rf.mu.Lock()
+						// 跟随者 -> 候选人
+						rf.currentTerm++
+						rf.role = 1
+						// 选择自己
+						rf.votes = 1
+						rf.votedFor = rf.me
+						DPrintf("  跟随者 -> 候选人 votes:%d",
+							rf, rf.votes)
+						// 发出投票
+						length := len(rf.peers)
+						rf.mu.Unlock()
+
+						wg := sync.WaitGroup{}
+						for i := 0; i < length; i++ {
+							rf.mu.Lock()
+							role := rf.role
+							rf.mu.Unlock()
+							if role != 1 {
+								break
+							}
+							if i != rf.me {
+								wg.Add(1)
+								go func(wg *sync.WaitGroup, i int, rf *Raft) {
+									defer wg.Done()
+									rf.mu.Lock()
+									args := RequestVoteArgs{
+										Term:        rf.currentTerm,
+										CandidateId: rf.me,
+									}
+									reply := RequestVoteReply{}
+									rf.mu.Unlock()
+
+									rf.sendRequestVote(i, &args, &reply)
+
+									rf.mu.Lock()
+									if reply.VoteGranted && reply.Term == rf.currentTerm {
+										// 成功获取选票
+										rf.votes++
+										DPrintf("【收到】投票", rf)
+										if rf.votes > len(rf.peers)/2 {
+											rf.role = 2
+											DPrintf("===========成为leader============ ", rf)
+										}
+									} else {
+										// 获得选票失败 : 候选人->跟随者
+										// rf.currentTerm = reply.term
+										if rf.currentTerm < reply.Term {
+											rf.currentTerm = reply.Term
+											// 恢复跟随者身份   候选人->跟随者
+											rf.role = 0
+											rf.votedFor = -1
+											rf.votes = 0
+											DPrintf("【没有收到】投票&&currentTerm 太小了-》恢复跟随者身份",
+												rf)
+										}
+									}
+									rf.mu.Unlock()
+								}(&wg, i, rf)
+
+							}
+						}
+						wg.Wait()
+					}
+					askForVotesChan <- struct{}{}
+				}(askForVotesChan, leaderChan)
+				rand.Seed(time.Now().UnixMilli())
+				select {
+				case <-askForVotesChan:
+					{
+						Infof("选举正常结束", rf)
+						rf.mu.Lock()
+						if rf.role != 2 {
+							rf.role = 0
+							rf.votedFor = -1
+							rf.votes = 0
+							Errorf("me: %d, 【竞争失败】-》恢复跟随者身份", rf, rf.me)
+						}
+						rf.mu.Unlock()
+					}
+				case <-leaderChan:
+					{
+						DPrintf("我是leader不需要选举", rf)
+					}
+				case <-time.Tick(time.Duration(100+rand.Intn(300)) * time.Millisecond):
+					{
+						Errorf("选举超时", rf)
+						rf.mu.Lock()
+						if rf.role != 2 {
+							rf.role = 0
+							rf.votedFor = -1
+							rf.votes = 0
+							Errorf("me: %d, 【竞争失败】-》恢复跟随者身份", rf, rf.me)
+						}
+						rf.mu.Unlock()
+					}
 				}
-				rf.mu.Unlock()
 			}
 		}
 
 	}
+	DPrintf("%d: is killed -----------===================-------------", rf, rf.me)
 }
 
 // 服务或测试人员想要创建一个Raft服务器。
@@ -472,12 +531,11 @@ func Make(peers []*labrpc.ClientEnd, me int,
 		//2A
 		votedFor:          -1,
 		role:              0,
-		leaderHeartsBeats: make(chan struct{}),
+		leaderHeartsBeats: make(chan struct{}, 1),
 	}
 
 	// Your initialization code here (2A, 2B, 2C).
 	// 2A
-
 	// initialize from state persisted before a crash
 	rf.readPersist(persister.ReadRaftState())
 
