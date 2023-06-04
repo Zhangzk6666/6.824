@@ -246,7 +246,13 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 // that the caller passes the address of the reply struct with &, not
 // the struct itself.
 func (rf *Raft) sendRequestVote(server int, args *RequestVoteArgs, reply *RequestVoteReply) bool {
+	Infof("【Vote】 call() S%d -----> S%d ", rf, rf.me, server)
 	ok := rf.peers[server].Call("Raft.RequestVote", args, reply)
+	if !ok {
+		Errorf("【Vote】 call() 【res】 S%d --×××××--> S%d ", rf, rf.me, server)
+	} else {
+		Infof("【Vote】 call()  【res】 S%d --√√√√√√--> S%d ", rf, rf.me, server)
+	}
 	return ok
 }
 
@@ -301,7 +307,13 @@ type Empty struct {
 
 // 2A 心跳RPC
 func (rf *Raft) sendHeartsBeatsMsg(server int, args *HeartsBeatsMsg, empty *Empty) bool {
+	Infof("【HeartsBeats】 call()   S%d -----> S%d ", rf, rf.me, server)
 	ok := rf.peers[server].Call("Raft.DealHeartsBeatsMsg", args, empty)
+	if !ok {
+		Errorf("【HeartsBeats】 call()  【res】 S%d --×××××--> S%d ", rf, rf.me, server)
+	} else {
+		Infof("【HeartsBeats】 call()  【res】 S%d --√√√√√√--> S%d ", rf, rf.me, server)
+	}
 	return ok
 }
 func (rf *Raft) DealHeartsBeatsMsg(args *HeartsBeatsMsg, empty *Empty) {
@@ -329,9 +341,7 @@ func (rf *Raft) DealHeartsBeatsMsg(args *HeartsBeatsMsg, empty *Empty) {
 // 2A 心跳机制
 func (rf *Raft) heartsbeats() {
 	for rf.killed() == false {
-		time.Sleep(20 * time.Millisecond)
 		normalHeartBeats := make(chan struct{}, 0)
-		/////////
 		if _, isLeader := rf.GetState(); !isLeader {
 			continue
 		}
@@ -360,15 +370,15 @@ func (rf *Raft) heartsbeats() {
 			wg.Wait()
 			normalHeartBeats <- struct{}{}
 		}(rf)
-		//////////////
+
 		rand.Seed(time.Now().UnixMilli())
 		select {
 		case <-normalHeartBeats:
 			{
-				Infof("心跳正常", rf)
+				Infof("心跳周期结束", rf)
 			}
 			// 心跳超时处理
-		case <-time.Tick(time.Duration(100+rand.Intn(30)) * time.Millisecond):
+		case <-time.Tick(time.Duration(75+rand.Intn(75)) * time.Millisecond):
 			{
 				Errorf("心跳超时", rf)
 			}
@@ -385,9 +395,10 @@ func (rf *Raft) ticker() {
 		// Your code here to check if a leader election should
 		// be started and to randomize sleeping time using
 		// time.Sleep().
+		rand.Seed(time.Now().UnixMilli())
 		select {
 		case <-rf.leaderHeartsBeats:
-		case <-time.Tick(80 * time.Millisecond):
+		case <-time.Tick(time.Duration(150+rand.Intn(150)) * time.Millisecond):
 			{
 				askForVotesChan := make(chan struct{}, 0)
 				leaderChan := make(chan struct{}, 0)
@@ -484,7 +495,7 @@ func (rf *Raft) ticker() {
 					{
 						DPrintf("我是leader不需要选举", rf)
 					}
-				case <-time.Tick(time.Duration(100+rand.Intn(300)) * time.Millisecond):
+				case <-time.Tick(time.Duration(150+rand.Intn(150)) * time.Millisecond):
 					{
 						Errorf("选举超时", rf)
 						rf.mu.Lock()
