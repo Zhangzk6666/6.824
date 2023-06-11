@@ -1,5 +1,12 @@
 package raft
 
+/**
+这是raft必须向服务(或测试人员)公开的API的大纲。有关这些函数的详细信息，请参阅下面的注释。
+  创建一个新的Raft服务器  rf = Make(...)
+  在新的日志项上启动协议  rf.Start(command interface{}) (index, term, isleader)
+  询问Raft当前的任期，以及它是否认为自己是leader  rf.GetState() (term, isLeader)
+  ApplyMsg 每次向日志提交一个新条目时，每个Raft peer都应该向同一服务器中的服务(或测试器)发送一个ApplyMsg。
+**/
 //
 // this is an outline of the API that raft must expose to
 // the service (or tester). see comments below for
@@ -62,23 +69,29 @@ type Raft struct {
 	// Look at the paper's Figure 2 for a description of what
 	// state a Raft server must maintain.
 
-	//2A
+	//2A 2B
+	votes             int           // 票数
+	leaderHeartsBeats chan struct{} //心跳通知
+	role              int           // 跟随者、候选者、领导者  0、1、2
+
+	applyCh chan ApplyMsg
+
 	//所有服务器---持久性状态
-	role        int // 跟随者、候选者、领导者  0、1、2
-	currentTerm int // 服务器已知最新的任期（在服务器首次启动时初始化为0，单调递增）
-	votedFor    int // 当前任期内收到选票的 candidateId，如果没有投给任何候选人 则为空
-	log         int // 日志条目；每个条目包含了用于状态机的命令，以及领导人接收到该条目时的任期（初始索引为1）
+	currentTerm int        // 服务器已知最新的任期（在服务器首次启动时初始化为0，单调递增）
+	votedFor    int        // 当前任期内收到选票的 candidateId，如果没有投给任何候选人 则为空
+	log         []logEntry // 日志条目；每个条目包含了用于状态机的命令，以及领导人接收到该条目时的任期（初始索引为1）
 	//所有服务器---易失性状态
 	commitIndex int //已知已提交的最高的日志条目的索引（初始值为0，单调递增）
 	lastApplied int //已经被应用到状态机的最高的日志条目的索引（初始值为0，单调递增）
-
-	votes             int
-	leaderHeartsBeats chan struct{}
-	// isLeader bool
 	// 领导人---易失性状态
-	nextIndex  []int //对于每一台服务器，发送到该服务器的下一个日志条目的索引（初始值为领导人最后的日志条目的索引+1）
-	matchIndex []int //对于每一台服务器，已知的已经复制到该服务器的最高日志条目的索引（初始值为0，单调递增）
+	nextIndex  map[int]int //对于每一台服务器，发送到该服务器的下一个日志条目的索引（初始值为领导人最后的日志条目的索引+1）
+	matchIndex map[int]int //对于每一台服务器，已知的已经复制到该服务器的最高日志条目的索引（初始值为0，单调递增）
 
+}
+type logEntry struct {
+	index   int //索引
+	term    int
+	command interface{}
 }
 
 // return currentTerm and whether this server
@@ -256,6 +269,18 @@ func (rf *Raft) sendRequestVote(server int, args *RequestVoteArgs, reply *Reques
 	return ok
 }
 
+/**
+使用Raft的服务(例如，一个k/v服务器)想要在附加到Raft日志的下一个命令上启动协议。
+如果此服务器不是领先者，则返回false。否则立即签署协议并返回。
+不能保证这个命令会被提交到Raft日志中，因为leader可能会失败或输掉选举。
+即使Raft实例已经被终止，这个函数也应该优雅地返回。
+
+第一个返回值是命令在提交时出现的索引。
+第二个返回值是 currentTerm。
+如果此服务器认为第三个返回值为真，则该返回值为真。
+领导者。
+**/
+
 // the service using Raft (e.g. a k/v server) wants to start
 // agreement on the next command to be appended to Raft's log. if this
 // server isn't the leader, returns false. otherwise start the
@@ -271,10 +296,27 @@ func (rf *Raft) sendRequestVote(server int, args *RequestVoteArgs, reply *Reques
 func (rf *Raft) Start(command interface{}) (int, int, bool) {
 	index := -1
 	term := -1
-	isLeader := true
+	isLeader := false
 
 	// Your code here (2B).
 
+	// rf.persister.
+	// rf.log.
+	// ??? index
+	term, isLeader = rf.GetState()
+	if isLeader {
+		// 追加log
+		// ???????
+		rf.mu.Lock()
+		index = len(rf.log)
+		rf.log = append(rf.log, logEntry{
+			index:   index,
+			term:    term,
+			command: command,
+		})
+		rf.mu.Unlock()
+		Infof("Start().. command追加,当前 rf.log:%v commitIndex: %v   command内容: %v", rf, rf.log, rf.commitIndex, command)
+	}
 	return index, term, isLeader
 }
 
@@ -297,18 +339,27 @@ func (rf *Raft) killed() bool {
 	return z == 1
 }
 
-// 2A 心跳RPC struct
-type HeartsBeatsMsg struct {
-	Term        int //候选人的任期号
-	CandidateId int // 请求选票的候选人的 ID
+// 2A  2B
+// 追加条目 || 也被当做心跳使用
+type AppendEntriesArgs struct {
+	Term         int           //领导人的任期
+	LeaderId     int           //领导人 ID 因此跟随者可以对客户端进行重定向（译者注：跟随者根据领导人
+	ID           int           //把客户端的请求重定向到领导人，比如有时客户端把请求发给了跟随者而不是领导人）
+	PrevLogIndex int           //紧邻新日志条目之前的那个日志条目的索引
+	PrevLogTerm  int           //紧邻新日志条目之前的那个日志条目的任期
+	Entries      []interface{} //需要被保存的日志条目（被当做心跳使用时，则日志条目内容为空；为了提高效率可能一次性发送多个）
+	LeaderCommit int           //领导人的已知已提交的最高的日志条目的索引
 }
-type Empty struct {
+
+type AppendEntriesReply struct {
+	Term    int  //当前任期，对于领导人而言 它会更新自己的任期
+	Success bool //如果跟随者所含有的条目和 prevLogIndex 以及 prevLogTerm 匹配上了，则为 true
 }
 
 // 2A 心跳RPC
-func (rf *Raft) sendHeartsBeatsMsg(server int, args *HeartsBeatsMsg, empty *Empty) bool {
-	Infof("【HeartsBeats】 call()   S%d -----> S%d ", rf, rf.me, server)
-	ok := rf.peers[server].Call("Raft.DealHeartsBeatsMsg", args, empty)
+func (rf *Raft) sendHeartsBeatsMsg(server int, args *AppendEntriesArgs, reply *AppendEntriesReply) bool {
+	// Infof("【HeartsBeats】 call()   S%d -----> S%d ", rf, rf.me, server)
+	ok := rf.peers[server].Call("Raft.DealHeartsBeatsMsg", args, reply)
 	if !ok {
 		Errorf("【HeartsBeats】 call()  【res】 S%d --×××××--> S%d ", rf, rf.me, server)
 	} else {
@@ -316,26 +367,95 @@ func (rf *Raft) sendHeartsBeatsMsg(server int, args *HeartsBeatsMsg, empty *Empt
 	}
 	return ok
 }
-func (rf *Raft) DealHeartsBeatsMsg(args *HeartsBeatsMsg, empty *Empty) {
-	if _, isLeader := rf.GetState(); isLeader {
-		rf.mu.Lock()
-		term := rf.currentTerm
-		rf.mu.Unlock()
-		if args.Term < term {
+
+func (rf *Raft) DealHeartsBeatsMsg(args *AppendEntriesArgs, reply *AppendEntriesReply) {
+	term, isLeader := rf.GetState()
+	// -3 无效心跳
+	// -2 普通心跳
+	// -1 任期太小
+	// 其他: 任期
+	reply.Term = -2
+	reply.Success = false
+	if isLeader {
+		if args.Term <= term {
+			// leader 且 term > args.Term
+			// 无效的心跳
+			reply.Term = -1
+			Errorf("i am leader,无效心跳", rf)
 			return
 		}
 	}
+	if args.Term < term {
+		// args.Term < term
+		// 无效的心跳
+		reply.Term = -1
+		Errorf("任期太小,拒绝.....", rf)
+		return
+	}
+	go func(rf *Raft) {
+		rf.leaderHeartsBeats <- struct{}{}
+		// DPrintf(" 接收到leader:%d 的心跳,同步term,变为追随者【【【【【【【【【【", rf, args.LeaderId)
+	}(rf)
+
 	rf.mu.Lock()
 	// 1、不是leader
 	// 2、是leader但是currentTerm小于另一个leader
 	// DPrintf("%d", args.Term == rf.currentTerm)
+
 	rf.role = 0
 	rf.votes = 0
 	rf.currentTerm = args.Term
-	rf.votedFor = args.CandidateId
+	rf.votedFor = args.LeaderId
+
+	//  log 处理
+	prevLogIndex := args.PrevLogIndex
+	prevLogTerm := args.PrevLogTerm
+	flag := false
+	expectLogLength := 0
+	DPrintf("========args:  %v ", rf, args)
+	DPrintf("========rf.log:  %v ", rf, rf.log)
+	if len(args.Entries) != 0 {
+		if len(rf.log) == 0 {
+			flag = true
+		} else {
+			DPrintf("len(rf.log): %v    当前 commitIndex: %v ", rf, len(rf.log), rf.commitIndex)
+			for i := 0; i < len(rf.log) && !flag; i++ {
+				Infof("---------rf.log[i].index == prevLogIndex: %v ", rf, rf.log[i].index == prevLogIndex)
+				Infof("---------rf.log[i].term == prevLogTerm: %v ", rf, rf.log[i].term == prevLogTerm)
+				Infof("---------log %v ", rf, rf.log)
+				if rf.log[i].index == prevLogIndex && rf.log[i].term == prevLogTerm {
+					flag = true
+					expectLogLength = i + 1
+					Infof("--------- %v ", rf, expectLogLength)
+					break
+				}
+			}
+		}
+
+	}
+
+	if flag {
+		//  记录日志 || 验证日志
+		rf.log = append(rf.log[:expectLogLength], logEntry{
+			index:   prevLogIndex + 1,
+			term:    args.Term,
+			command: args.Entries[0],
+		})
+		rf.commitIndex = prevLogIndex + 1
+		Infof("add log %v ", rf, args.Entries[0])
+		// reply
+		reply.Term = rf.currentTerm
+		reply.Success = true
+	}
+	// commitIndex 更新
+	if rf.commitIndex < args.LeaderCommit {
+		if rf.log[len(rf.log)-1].index > args.LeaderCommit {
+			rf.commitIndex = args.LeaderCommit
+		} else {
+			rf.commitIndex = rf.log[len(rf.log)-1].index
+		}
+	}
 	rf.mu.Unlock()
-	rf.leaderHeartsBeats <- struct{}{}
-	// DPrintf(" 接收到leader:%d 的心跳,同步term,变为追随者【【【【【【【【【【", rf, args.CandidateId)
 }
 
 // 2A 心跳机制
@@ -358,24 +478,121 @@ func (rf *Raft) heartsbeats() {
 				go func(wg *sync.WaitGroup, i int, rf *Raft) {
 					defer wg.Done()
 					rf.mu.Lock()
-					args := HeartsBeatsMsg{
-						Term:        rf.currentTerm,
-						CandidateId: rf.me,
+					currentIndex := rf.nextIndex[i]
+					prevLogIndex := currentIndex - 1
+					if prevLogIndex <= 0 {
+						prevLogIndex = 0
+					}
+					prevLogTerm := 0
+					var currentLog interface{}
+					for j := 0; j < len(rf.log); j++ {
+						// Infof("===================1,prevLogIndex:%v", rf, prevLogIndex)
+						if rf.log[j].index > prevLogIndex {
+							Errorf("%v", rf, rf.log[j])
+							break
+						}
+						if rf.log[j].index == prevLogIndex {
+							prevLogTerm = rf.log[j].term
+							currentIndex := j + 1
+							if currentIndex < len(rf.log) {
+								currentLog = rf.log[currentIndex].command
+								// Infof("===================2,prevLogIndex:%v", rf, prevLogIndex)
+							}
+							// Infof("===================3,prevLogIndex:%v", rf, prevLogIndex)
+							break
+						}
+					}
+					entries := make([]interface{}, 0)
+					// 找不到再往前的log
+					if prevLogTerm == 0 && len(rf.log) > 1 {
+						currentLog = rf.log[1].command
+					}
+					if currentLog != nil {
+						entries = append(entries, currentLog)
+					}
+					args := AppendEntriesArgs{
+						Term:         rf.currentTerm,
+						LeaderId:     rf.me,
+						ID:           rf.me,
+						PrevLogIndex: prevLogIndex,
+						PrevLogTerm:  prevLogTerm,
+						Entries:      entries,
+						LeaderCommit: rf.commitIndex,
 					}
 					rf.mu.Unlock()
+					reply := AppendEntriesReply{}
 					// DPrintf("发出心跳,】】】】】】】】】", rf)
-					rf.sendHeartsBeatsMsg(i, &args, &Empty{})
+					rf.sendHeartsBeatsMsg(i, &args, &reply)
+					DPrintf("currentIndex:%v  prevLogIndex:%v  args:%v  reply:%v",
+						rf, currentIndex, prevLogIndex, args, reply)
+					if reply.Success {
+						// TODO
+						rf.mu.Lock()
+						Infof("同步日志,】】   rf.commitIndex :%v    rf.nextIndex[i] :%v  ",
+							rf, rf.commitIndex, rf.nextIndex[i])
+						if reply.Term == rf.currentTerm {
+							if rf.commitIndex <= prevLogIndex {
+								rf.commitIndex = prevLogIndex + 1
+							}
+							if rf.nextIndex[i] == currentIndex && rf.commitIndex >= rf.nextIndex[i] {
+								rf.nextIndex[i]++
+							}
+						}
+
+						rf.mu.Unlock()
+
+					} else {
+						// if reply.Term != 0 {
+						rf.mu.Lock()
+						// -3 无效心跳
+						// -2 普通心跳
+						// -1 任期太小
+						// 其他: 任期
+						if reply.Term == -1 {
+							// 回归跟随者
+							rf.role = 0
+							rf.votedFor = -1
+							rf.votes = 0
+							Errorf("【任期太小】-》恢复跟随者身份", rf)
+						} else if reply.Term == -2 {
+							// 普通心跳
+							Infof("普通心跳.......", rf)
+						} else if reply.Term == -3 {
+							// 普通心跳
+							Infof("无效心跳.......", rf)
+						} else if reply.Term == rf.currentTerm {
+							if rf.nextIndex[i] == currentIndex {
+								rf.nextIndex[i]--
+							}
+							if rf.nextIndex[i] <= 0 {
+								rf.nextIndex[i] = 0
+							}
+						}
+
+						rf.mu.Unlock()
+					}
+					// }
 				}(&wg, i, rf)
 			}
 			wg.Wait()
 			normalHeartBeats <- struct{}{}
 		}(rf)
 
+		// // 日志确认
+		// go func(rf *Raft) {
+		// 	rf.mu.Lock()
+		// 	length := len(rf.peers)
+		// 	rf.mu.Unlock()
+		// 	minIndex := 0
+		// 	for i := 0; i < length; i++ {
+
+		// 	}
+		// }(rf)
 		rand.Seed(time.Now().UnixMilli())
 		select {
 		case <-normalHeartBeats:
 			{
-				Infof("心跳周期结束", rf)
+				// Infof("心跳周期结束", rf)
 			}
 			// 心跳超时处理
 		case <-time.Tick(time.Duration(75+rand.Intn(75)) * time.Millisecond):
@@ -384,6 +601,31 @@ func (rf *Raft) heartsbeats() {
 			}
 		}
 
+	}
+}
+
+// 应用日志
+func (rf *Raft) applyEntries() {
+	for rf.killed() == false {
+		rf.mu.Lock()
+		commitIndex := rf.commitIndex
+		lastApplied := rf.lastApplied
+		rf.mu.Unlock()
+		if lastApplied != commitIndex {
+			for i := lastApplied + 1; i <= commitIndex; i++ {
+				rf.applyCh <- ApplyMsg{
+					CommandValid: true,
+					Command:      rf.log[i].command,
+					CommandIndex: rf.log[i].index,
+				}
+				rf.mu.Lock()
+				rf.lastApplied = i
+				rf.mu.Unlock()
+			}
+
+		} else {
+			time.Sleep(50 * time.Millisecond)
+		}
 	}
 }
 
@@ -512,7 +754,7 @@ func (rf *Raft) ticker() {
 		}
 
 	}
-	DPrintf("%d: is killed -----------===================-------------", rf, rf.me)
+	DPrintf("%d: is killed -----------------------", rf, rf.me)
 }
 
 // 服务或测试人员想要创建一个Raft服务器。
@@ -543,10 +785,22 @@ func Make(peers []*labrpc.ClientEnd, me int,
 		votedFor:          -1,
 		role:              0,
 		leaderHeartsBeats: make(chan struct{}, 1),
+		//2B
+		lastApplied: 0,
+		log:         make([]logEntry, 1),
+		nextIndex:   make(map[int]int),
+		matchIndex:  make(map[int]int),
+
+		applyCh: applyCh,
 	}
 
 	// Your initialization code here (2A, 2B, 2C).
 	// 2A
+	// TODO 从磁盘读取信息并赋值
+	for i := 0; i < len(rf.peers); i++ {
+		rf.nextIndex[i] = rf.lastApplied
+		rf.matchIndex[i] = 0
+	}
 	// initialize from state persisted before a crash
 	rf.readPersist(persister.ReadRaftState())
 
@@ -554,5 +808,8 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	go rf.ticker()
 	// 心跳机制
 	go rf.heartsbeats()
+	// 应用日志
+	go rf.applyEntries()
+
 	return rf
 }
