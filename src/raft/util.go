@@ -79,7 +79,8 @@ type Log struct {
 }
 
 func DPrintf(template string, rf *Raft, args ...interface{}) {
-	prefix := fmt.Sprintf("S%d ,T%d ,votes: %d ", rf.me, rf.currentTerm, rf.votes)
+	prefix := fmt.Sprintf("S%d ,T%d ,votes: %d, role:%v rf.votedFor:%v  len(rf.peers):%v ", 
+	rf.me, rf.currentTerm, rf.votes, rf.role, rf.votedFor, len(rf.peers))
 	template = prefix + template + "\n"
 	PrettyDebug(dTimer, template, args...)
 }
@@ -88,16 +89,16 @@ func Infof(template string, rf *Raft, args ...interface{}) {
 	// prefix := fmt.Sprintf("S%d ,T%d ", l.raft.me, l.raft.currentTerm)
 	// template = prefix + template + "\n"
 	// PrettyDebug(dLog, template, args)
-	prefix := fmt.Sprintf("S%d ,T%d ,votes: %d ", rf.me, rf.currentTerm, rf.votes)
+	prefix := fmt.Sprintf("S%d ,T%d ,votes: %d, role:%v rf.votedFor:%v  len(rf.peers):%v ", rf.me, rf.currentTerm, rf.votes, rf.role, rf.votedFor, len(rf.peers))
 	template = prefix + template + "\n"
 	PrettyDebug(dLog, template, args...)
 }
 
-func Errorf(template string,rf *Raft, args ...interface{}) {
+func Errorf(template string, rf *Raft, args ...interface{}) {
 	// prefix := fmt.Sprintf("S%d ,T%d ", l.raft.me, l.raft.currentTerm)
 	// template = prefix + template + "\n"
 	// PrettyDebug(dTrace, template, args)
-	prefix := fmt.Sprintf("S%d ,T%d ,votes: %d ", rf.me, rf.currentTerm, rf.votes)
+	prefix := fmt.Sprintf("S%d ,T%d ,votes: %d, role:%v rf.votedFor:%v  len(rf.peers):%v ", rf.me, rf.currentTerm, rf.votes, rf.role, rf.votedFor, len(rf.peers))
 	template = prefix + template + "\n"
 	PrettyDebug(dTrace, template, args...)
 }

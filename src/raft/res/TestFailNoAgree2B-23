@@ -1,0 +1,70 @@
+Test (2B): no agreement if too many followers disconnect ...
+001610 TIMR S0 ,T1 ,votes: 1, role:1 rf.votedFor:0  len(rf.peers):5   跟随者 -> 候选人 votes:1
+001611 LOG1 S0 ,T1 ,votes: 1, role:1 rf.votedFor:0  len(rf.peers):5 【Vote】 call() S0 -----> S4 
+001612 LOG1 S0 ,T1 ,votes: 1, role:1 rf.votedFor:0  len(rf.peers):5 【Vote】 call() S0 -----> S2 
+001612 LOG1 S0 ,T1 ,votes: 1, role:1 rf.votedFor:0  len(rf.peers):5 【Vote】 call() S0 -----> S3 
+001613 LOG1 S4 ,T1 ,votes: 0, role:0 rf.votedFor:0  len(rf.peers):5 【给出】投票 S4 ---> S0
+001613 LOG1 S0 ,T1 ,votes: 1, role:1 rf.votedFor:0  len(rf.peers):5 【Vote】 call() S0 -----> S1 
+001614 LOG1 S0 ,T1 ,votes: 1, role:1 rf.votedFor:0  len(rf.peers):5 【Vote】 call()  【res】 S0 --√√√√√√--> S4 
+001614 LOG1 S3 ,T1 ,votes: 0, role:0 rf.votedFor:0  len(rf.peers):5 【给出】投票 S3 ---> S0
+001615 LOG1 S1 ,T1 ,votes: 0, role:0 rf.votedFor:0  len(rf.peers):5 【给出】投票 S1 ---> S0
+001615 LOG1 S2 ,T1 ,votes: 0, role:0 rf.votedFor:0  len(rf.peers):5 【给出】投票 S2 ---> S0
+001614 TIMR S0 ,T1 ,votes: 2, role:1 rf.votedFor:0  len(rf.peers):5 【收到】投票
+001615 LOG1 S0 ,T1 ,votes: 2, role:1 rf.votedFor:0  len(rf.peers):5 【Vote】 call()  【res】 S0 --√√√√√√--> S3 
+001615 TIMR S0 ,T1 ,votes: 3, role:1 rf.votedFor:0  len(rf.peers):5 【收到】投票
+001615 TIMR S0 ,T1 ,votes: 3, role:2 rf.votedFor:0  len(rf.peers):5 ===========成为leader============ 
+001615 LOG1 S0 ,T1 ,votes: 3, role:2 rf.votedFor:0  len(rf.peers):5 【Vote】 call()  【res】 S0 --√√√√√√--> S1 
+001615 TIMR S0 ,T1 ,votes: 4, role:2 rf.votedFor:0  len(rf.peers):5 【收到】投票
+001615 LOG1 S0 ,T1 ,votes: 3, role:2 rf.votedFor:0  len(rf.peers):5 【Vote】 call()  【res】 S0 --√√√√√√--> S2 
+001615 TIMR S0 ,T1 ,votes: 5, role:2 rf.votedFor:0  len(rf.peers):5 【收到】投票
+001669 LOG1 S1 ,T1 ,votes: 0, role:0 rf.votedFor:0  len(rf.peers):5 跟随者身份续期
+001693 LOG1 S0 ,T1 ,votes: 5, role:2 rf.votedFor:0  len(rf.peers):5 同步日志,>> S4   rf.commitIndex :0    rf.nextIndex[i] :0  
+001694 LOG1 S0 ,T1 ,votes: 5, role:2 rf.votedFor:0  len(rf.peers):5 【HeartsBeats】 call()   S0 -----> S4 
+001695 LOG1 S0 ,T1 ,votes: 5, role:2 rf.votedFor:0  len(rf.peers):5 同步日志,>> S1   rf.commitIndex :0    rf.nextIndex[i] :0  
+001696 LOG1 S0 ,T1 ,votes: 5, role:2 rf.votedFor:0  len(rf.peers):5 【HeartsBeats】 call()   S0 -----> S1 
+001696 LOG1 S0 ,T1 ,votes: 5, role:2 rf.votedFor:0  len(rf.peers):5 同步日志,>> S2   rf.commitIndex :0    rf.nextIndex[i] :0  
+001696 LOG1 S0 ,T1 ,votes: 5, role:2 rf.votedFor:0  len(rf.peers):5 【HeartsBeats】 call()   S0 -----> S2 
+001697 TIMR S1 ,T1 ,votes: 0, role:0 rf.votedFor:0  len(rf.peers):5 ========rf.log:  [{0 0 <nil>}] ||  rf.commitIndex:0
+001697 TIMR S2 ,T1 ,votes: 0, role:0 rf.votedFor:0  len(rf.peers):5 ========rf.log:  [{0 0 <nil>}] ||  rf.commitIndex:0
+001697 LOG1 S0 ,T1 ,votes: 5, role:2 rf.votedFor:0  len(rf.peers):5 同步日志,>> S3   rf.commitIndex :0    rf.nextIndex[i] :0  
+001698 LOG1 S0 ,T1 ,votes: 5, role:2 rf.votedFor:0  len(rf.peers):5 【HeartsBeats】 call()   S0 -----> S3 
+001698 LOG1 S0 ,T1 ,votes: 5, role:2 rf.votedFor:0  len(rf.peers):5 【HeartsBeats】 call()  【res】 S0 --√√√√√√--> S1 
+001698 TIMR S0 ,T1 ,votes: 5, role:2 rf.votedFor:0  len(rf.peers):5 rf.log:[{0 0 <nil>}]
+001696 TIMR S4 ,T1 ,votes: 0, role:0 rf.votedFor:0  len(rf.peers):5 ========rf.log:  [{0 0 <nil>}] ||  rf.commitIndex:0
+001699 LOG1 S0 ,T1 ,votes: 5, role:2 rf.votedFor:0  len(rf.peers):5 【HeartsBeats】 call()  【res】 S0 --√√√√√√--> S4 
+001699 TIMR S0 ,T1 ,votes: 5, role:2 rf.votedFor:0  len(rf.peers):5 rf.log:[{0 0 <nil>}]
+001699 TIMR S3 ,T1 ,votes: 0, role:0 rf.votedFor:0  len(rf.peers):5 ========rf.log:  [{0 0 <nil>}] ||  rf.commitIndex:0
+001700 LOG1 S0 ,T1 ,votes: 5, role:2 rf.votedFor:0  len(rf.peers):5 【HeartsBeats】 call()  【res】 S0 --√√√√√√--> S3 
+001700 TIMR S0 ,T1 ,votes: 5, role:2 rf.votedFor:0  len(rf.peers):5 rf.log:[{0 0 <nil>}]
+001699 LOG1 S0 ,T1 ,votes: 5, role:2 rf.votedFor:0  len(rf.peers):5 【HeartsBeats】 call()  【res】 S0 --√√√√√√--> S2 
+001700 TIMR S0 ,T1 ,votes: 5, role:2 rf.votedFor:0  len(rf.peers):5 rf.log:[{0 0 <nil>}]
+002037 LOG1 S0 ,T1 ,votes: 5, role:2 rf.votedFor:0  len(rf.peers):5 Start().. command追加,当前 rf.log:[{0 0 <nil>} {1 1 10}] commitIndex: 0   command内容: 10
+002207 TRCE S0 ,T1 ,votes: 5, role:2 rf.votedFor:0  len(rf.peers):5 心跳超时
+002209 LOG1 S0 ,T1 ,votes: 5, role:2 rf.votedFor:0  len(rf.peers):5 同步日志,>> S4   rf.commitIndex :0    rf.nextIndex[i] :1  
+002209 LOG1 S0 ,T1 ,votes: 5, role:2 rf.votedFor:0  len(rf.peers):5 【HeartsBeats】 call()   S0 -----> S4 
+002209 LOG1 S0 ,T1 ,votes: 5, role:2 rf.votedFor:0  len(rf.peers):5 同步日志,>> S2   rf.commitIndex :0    rf.nextIndex[i] :1  
+002209 LOG1 S0 ,T1 ,votes: 5, role:2 rf.votedFor:0  len(rf.peers):5 【HeartsBeats】 call()   S0 -----> S2 
+002210 LOG1 S0 ,T1 ,votes: 5, role:2 rf.votedFor:0  len(rf.peers):5 同步日志,>> S3   rf.commitIndex :0    rf.nextIndex[i] :1  
+002210 LOG1 S4 ,T1 ,votes: 0, role:0 rf.votedFor:0  len(rf.peers):5 add log [{1 1 10}] 
+002210 TIMR S4 ,T1 ,votes: 0, role:0 rf.votedFor:0  len(rf.peers):5 ========rf.log:  [{0 0 <nil>} {1 1 10}] ||  rf.commitIndex:0
+002211 LOG1 S0 ,T1 ,votes: 5, role:2 rf.votedFor:0  len(rf.peers):5 同步日志,>> S1   rf.commitIndex :0    rf.nextIndex[i] :1  
+002211 LOG1 S0 ,T1 ,votes: 5, role:2 rf.votedFor:0  len(rf.peers):5 【HeartsBeats】 call()   S0 -----> S1 
+002211 LOG1 S2 ,T1 ,votes: 0, role:0 rf.votedFor:0  len(rf.peers):5 add log [{1 1 10}] 
+002211 TIMR S2 ,T1 ,votes: 0, role:0 rf.votedFor:0  len(rf.peers):5 ========rf.log:  [{0 0 <nil>} {1 1 10}] ||  rf.commitIndex:0
+002211 LOG1 S0 ,T1 ,votes: 5, role:2 rf.votedFor:0  len(rf.peers):5 【HeartsBeats】 call()  【res】 S0 --√√√√√√--> S4 
+002211 TIMR S0 ,T1 ,votes: 5, role:2 rf.votedFor:0  len(rf.peers):5 rf.log:[{0 0 <nil>} {1 1 10}]
+002210 LOG1 S0 ,T1 ,votes: 5, role:2 rf.votedFor:0  len(rf.peers):5 【HeartsBeats】 call()   S0 -----> S3 
+002212 LOG1 S0 ,T1 ,votes: 5, role:2 rf.votedFor:0  len(rf.peers):5 【HeartsBeats】 call()  【res】 S0 --√√√√√√--> S2 
+002212 TIMR S0 ,T1 ,votes: 5, role:2 rf.votedFor:0  len(rf.peers):5 rf.log:[{0 0 <nil>} {1 1 10}]
+002212 LOG1 S0 ,T1 ,votes: 5, role:2 rf.votedFor:0  len(rf.peers):5 applied....: {true 10 1 false [] 0 0}
+002212 LOG1 S1 ,T1 ,votes: 0, role:0 rf.votedFor:0  len(rf.peers):5 add log [{1 1 10}] 
+002213 TIMR S1 ,T1 ,votes: 0, role:0 rf.votedFor:0  len(rf.peers):5 ========rf.log:  [{0 0 <nil>} {1 1 10}] ||  rf.commitIndex:0
+002213 LOG1 S3 ,T1 ,votes: 0, role:0 rf.votedFor:0  len(rf.peers):5 add log [{1 1 10}] 
+002213 TIMR S3 ,T1 ,votes: 0, role:0 rf.votedFor:0  len(rf.peers):5 ========rf.log:  [{0 0 <nil>} {1 1 10}] ||  rf.commitIndex:0
+002213 LOG1 S0 ,T1 ,votes: 5, role:2 rf.votedFor:0  len(rf.peers):5 【HeartsBeats】 call()  【res】 S0 --√√√√√√--> S1 
+002213 TIMR S0 ,T1 ,votes: 5, role:2 rf.votedFor:0  len(rf.peers):5 rf.log:[{0 0 <nil>} {1 1 10}]
+002214 LOG1 S0 ,T1 ,votes: 5, role:2 rf.votedFor:0  len(rf.peers):5 【HeartsBeats】 call()  【res】 S0 --√√√√√√--> S3 
+002214 TIMR S0 ,T1 ,votes: 5, role:2 rf.votedFor:0  len(rf.peers):5 rf.log:[{0 0 <nil>} {1 1 10}]
+002297 LOG1 S2 ,T1 ,votes: 0, role:0 rf.votedFor:0  len(rf.peers):5 跟随者身份续期
+signal: interrupt
+FAIL	6.824/raft	0.234s
